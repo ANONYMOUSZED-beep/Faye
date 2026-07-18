@@ -52,9 +52,21 @@ class LearningMemory:
         hints = [row[1] for row in ranked[:limit] if row[1]]
         return "\n".join(dict.fromkeys(hints))
 
-    def recent_context(self, limit: int = 6) -> str:
+    def recent_context(self, limit: int = 6, char_limit: int | None = None) -> str:
         with self._lock, self._connect() as db:
             rows = db.execute(
                 "SELECT prompt,response FROM interactions ORDER BY id DESC LIMIT ?", (limit,)
             ).fetchall()
-        return "\n".join(f"User: {p}\nFaye: {r}" for p, r in reversed(rows))
+        turns = [f"User: {prompt}\nFaye: {response}" for prompt, response in rows]
+        if char_limit is None:
+            return "\n".join(reversed(turns))
+
+        newest: list[str] = []
+        length = 0
+        for turn in turns:
+            separator_length = 1 if newest else 0
+            if length + separator_length + len(turn) > char_limit:
+                break
+            newest.append(turn)
+            length += separator_length + len(turn)
+        return "\n".join(reversed(newest))

@@ -19,11 +19,20 @@ class AgentModel(Protocol):
 class BoundedOrchestrator:
     """Fast bounded fan-out: up to 100 workers, only when useful."""
 
-    def __init__(self, model: AgentModel, state_path: str | Path, max_agents: int = 100) -> None:
+    def __init__(
+        self,
+        model: AgentModel,
+        state_path: str | Path,
+        max_agents: int = 100,
+        context_char_limit: int = 12_000,
+    ) -> None:
         if not 1 <= max_agents <= 100:
             raise ValueError("max_agents must be between 1 and 100")
+        if context_char_limit < 1:
+            raise ValueError("context_char_limit must be positive")
         self.model = model
         self.max_agents = max_agents
+        self.context_char_limit = context_char_limit
         self.memory = LearningMemory(state_path)
 
     @staticmethod
@@ -56,10 +65,13 @@ class BoundedOrchestrator:
             self.memory.record_interaction(command, quick)
             return AgentAnswer(quick, 0, elapsed)
 
-        context = self.memory.recent_context()
+        context = self.memory.recent_context(char_limit=self.context_char_limit)
         hints = self.memory.improvement_hints(command)
         if hints:
-            context += f"\nPrior feedback to apply:\n{hints}"
+            hint_context = f"Prior feedback to apply:\n{hints}"
+            separator = "\n" if context else ""
+            if len(context) + len(separator) + len(hint_context) <= self.context_char_limit:
+                context += separator + hint_context
         tasks = self._deduplicate(self.model.plan(command, context))[:100]
         results: list[TaskResult] = []
         workers = min(self.max_agents, len(tasks))

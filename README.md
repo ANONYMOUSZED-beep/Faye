@@ -1,13 +1,17 @@
 # Faye
 
-**Faye is a fast, voice-first, self-improving AI orchestrator with up to 100 concurrent mini-agents.** She is explicitly software—not a human or a claim of consciousness—and her concise, sharp, resourceful voice is inspired by the broad character traits of Faye Valentine without impersonating her or copying dialogue.
+**Faye is a bounded coding agent, everyday AI assistant, and concurrent multi-agent orchestrator.** The product direction is an extensible alternative to Hermes Agent, Claude Code, and Codex CLI, with voice, desktop, integrations, and personal-assistant capabilities. She is explicitly software—not a human or a claim of consciousness—and her concise, sharp, resourceful voice is inspired by the broad character traits of Faye Valentine without impersonating her or copying dialogue.
 
 ## What works
 
 - **Fast path:** greetings and identity questions answer locally in milliseconds without an API call.
 - **Bounded swarm:** complex requests are decomposed into the fewest useful tasks and run concurrently with a hard limit of 100 workers.
+- **Typed agent loop:** OpenAI-compatible models can request registered capabilities, receive structured results, and continue reasoning for at most 12 turns and 32 tool calls per run.
+- **Read-only coding capability:** `read_file` reads UTF-8 line ranges from an explicit workspace, rejects source files over 262,144 bytes and responses over 65,536 characters, and uses lexical plus canonical path checks to reject absolute paths, Windows drive/stream syntax, traversal, and symlink escapes.
+- **Auditable failures:** every attempted capability call records its typed request, success state, and structured result; unknown tools and invalid arguments never widen the registry.
 - **Task deduplication:** equivalent work is collapsed before execution.
-- **Persistent improvement:** local SQLite memory stores interactions and explicit feedback, then applies relevant improvement hints later.
+- **Bounded conversation memory:** local SQLite memory persists recent turns while model context stays capped at 12,000 characters and retains only complete newest turns.
+- **Persistent improvement:** explicit feedback is stored locally and applied later when it fits the same context budget.
 - **Voice control on Windows:** native speech recognition and synthesis through `System.Speech`; no voice package required.
 - **Device-less fallback:** when no speaker endpoint is available, speech is saved under `~/.faye/audio/` and the CLI prints its path.
 - **Model portability:** any OpenAI-compatible endpoint, including OpenRouter and local servers.
@@ -43,6 +47,9 @@ uv run faye "hello"
 # AI request; Faye chooses the useful worker count up to the limit
 uv run faye --agents 100 "Compare three architectures for a local voice assistant"
 
+# Bounded coding-agent loop with read-only access to this repository
+uv run faye --agent --workspace . --max-turns 12 "Inspect the agent runtime"
+
 # Listen once through the default microphone and speak the response
 uv run faye --voice
 
@@ -54,6 +61,8 @@ uv run faye --run --approve "git status"  # blocked
 ```
 
 Only exact `pwd`, `whoami`, and `python --version` can run, and all three are implemented entirely in-process; the command gateway never launches a subprocess. Approval never widens this closed allowlist. Arbitrary programs, interpreters, mutations, uv, and every Git operation are blocked; future actions must use dedicated capability APIs with operation-specific validation.
+
+Agent mode does not use that command gateway and does not expose a generic shell. Its current registry contains only workspace-confined `read_file`. Tool output is returned to the model as untrusted data, and oversized tool batches are rejected atomically before any handler runs.
 
 ## Speed model
 
@@ -69,7 +78,7 @@ Faye does **not** wake all 100 workers for every message. That would be slower a
 
 ## Self-improvement
 
-`LearningMemory` stores data in `~/.faye/memory.db` by default. The public API can record corrections:
+`LearningMemory` stores data in `~/.faye/memory.db` by default. The orchestrator supplies up to six recent complete turns to the model in chronological order, retaining the newest turns that fit within a 12,000-character budget. The public API can record corrections:
 
 ```python
 agent.learn(
@@ -89,6 +98,11 @@ Voice / CLI
     |
     +-- deterministic fast path
     |
+    +-- bounded agent loop -> typed registry -> workspace read_file
+    |          |                                  |
+    |          +-- audit log                      +-- canonical containment
+    |          +-- turn/action budgets
+    |
     +-- planner -> deduplicate -> bounded pool (1..100 mini-agents)
                                       |
                                       +-> synthesize final answer
@@ -101,12 +115,27 @@ Voice / CLI
 | Module | Responsibility |
 |---|---|
 | `orchestrator.py` | Planning, deduplication, concurrent execution, synthesis |
-| `provider.py` | Dependency-free OpenAI-compatible model client and persona |
+| `agent.py` | Bounded model → capability → model loop and audit trail |
+| `capabilities.py` | Closed typed registry, JSON schemas, and argument validation |
+| `workspace.py` | Workspace-confined, bounded file capabilities |
+| `provider.py` | Dependency-free OpenAI-compatible text/tool client and persona |
 | `memory.py` | SQLite interaction and feedback memory |
 | `voice.py` | Native Windows speech input/output |
 | `safety.py` | Deterministic command classification |
 | `commands.py` | Closed, in-process execution of three inert operations |
 | `cli.py` | Text, voice, and command entry points |
+
+## Product roadmap
+
+The current release is the secure read-only foundation, not the finished product. Planned capability families are added as typed APIs—never by exposing an unrestricted shell:
+
+1. **Coding:** file search, patch/write operations, repository status/diff, and allowlisted build/test runners with workspace scopes, output limits, dry runs, and mutation approvals.
+2. **Autonomy:** plans, checkpoints, resumable tasks, budgets, cancellation, subagents, background jobs, and durable audit logs.
+3. **Everyday assistant:** web/browser tools, email, calendar, notes, reminders, documents, and user-controlled long-term memory.
+4. **Multimodal interaction:** richer voice sessions, images, screen context, and consent-scoped desktop control.
+5. **Extensibility:** provider adapters, plugins/skills, MCP-style integrations, per-capability permissions, and isolated execution backends.
+
+Each milestone must preserve typed schemas, least privilege, explicit workspace/resource scopes, bounded execution, untrusted-output handling, and tests for rejection paths.
 
 ## Verify
 

@@ -34,6 +34,63 @@ def test_simple_command_uses_fast_path_without_planner(tmp_path):
     assert answer.elapsed_ms < 100
 
 
+def test_model_context_keeps_newest_complete_turns_within_character_limit(tmp_path):
+    contexts = []
+
+    class ContextModel(FakeModel):
+        def plan(self, command, context):
+            contexts.append(context)
+            return self.tasks
+
+        def execute(self, task, context):
+            contexts.append(context)
+            return super().execute(task, context)
+
+        def synthesize(self, command, results, context):
+            contexts.append(context)
+            return super().synthesize(command, results, context)
+
+    model = ContextModel([TaskSpec(id="a", instruction="answer")])
+    agent = BoundedOrchestrator(
+        model=model,
+        state_path=tmp_path / "state.db",
+        context_char_limit=40,
+    )
+    agent.memory.record_interaction("older turn", "older response")
+    agent.memory.record_interaction("newest turn", "newest response")
+
+    agent.execute("continue")
+
+    assert contexts == ["User: newest turn\nFaye: newest response"] * 3
+    assert all(len(context) <= 40 for context in contexts)
+
+
+def test_feedback_hints_cannot_overflow_context_character_limit(tmp_path):
+    contexts = []
+
+    class ContextModel(FakeModel):
+        def plan(self, command, context):
+            contexts.append(context)
+            return []
+
+    agent = BoundedOrchestrator(
+        model=ContextModel([]),
+        state_path=tmp_path / "state.db",
+        context_char_limit=50,
+    )
+    agent.memory.record_interaction(
+        "summarize report",
+        "too long",
+        score=-1,
+        feedback="Use a concise answer with exactly five focused bullets.",
+    )
+
+    agent.execute("summarize another report")
+
+    assert contexts == ["User: summarize report\nFaye: too long"]
+    assert len(contexts[0]) <= 50
+
+
 def test_duplicate_tasks_are_deduplicated(tmp_path):
     tasks = [
         TaskSpec(id="a", instruction="research batteries"),
@@ -79,3 +136,12 @@ def test_runs_independent_tasks_concurrently_and_respects_limit(tmp_path):
 def test_agent_limit_is_hard_capped_at_100(tmp_path):
     with pytest.raises(ValueError, match="between 1 and 100"):
         BoundedOrchestrator(model=FakeModel([]), state_path=tmp_path / "state.db", max_agents=101)
+
+
+def test_context_character_limit_must_be_positive(tmp_path):
+    with pytest.raises(ValueError, match="context_char_limit must be positive"):
+        BoundedOrchestrator(
+            model=FakeModel([]),
+            state_path=tmp_path / "state.db",
+            context_char_limit=0,
+        )
