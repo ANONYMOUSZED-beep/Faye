@@ -1,3 +1,5 @@
+import subprocess
+
 from faye.voice import WindowsVoice
 
 
@@ -18,3 +20,23 @@ def test_windows_voice_returns_recognized_text():
     voice = WindowsVoice(runner=lambda *args, **kwargs: Result())
 
     assert voice.listen() == "open my calendar"
+
+
+def test_windows_voice_falls_back_to_wave_file_when_audio_device_is_missing(tmp_path):
+    calls = []
+
+    class Result:
+        stdout = str(tmp_path / "faye.wav") + "\n"
+
+    def runner(args, **kwargs):
+        calls.append(args)
+        if len(calls) == 1:
+            raise subprocess.CalledProcessError(1, args, stderr="Audio device error")
+        return Result()
+
+    voice = WindowsVoice(runner=runner, output_dir=tmp_path)
+
+    output = voice.speak("Faye is online")
+
+    assert output == tmp_path / "faye.wav"
+    assert "SetOutputToWaveFile" in calls[1][-1]
