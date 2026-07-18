@@ -5,16 +5,28 @@ import pytest
 from faye.commands import CommandExecutor, CommandRejected
 
 
-def test_read_only_command_executes_without_approval(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    import subprocess
-
-    subprocess.run("git init", shell=True, capture_output=True, cwd=str(tmp_path))
+def test_read_only_command_executes_without_approval():
     executor = CommandExecutor(timeout=5)
 
-    result = executor.run("git status --short")
+    result = executor.run("python --version")
 
     assert result.returncode == 0
+
+
+def test_auto_allowed_command_bypasses_shell(monkeypatch):
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, "Python 3.11", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    CommandExecutor(timeout=5).run("python --version")
+
+    command, kwargs = calls[0]
+    assert command == ["python", "--version"]
+    assert kwargs["shell"] is False
 
 
 def test_mutating_command_requires_approval():

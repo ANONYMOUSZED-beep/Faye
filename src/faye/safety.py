@@ -21,26 +21,27 @@ class SafetyPolicy:
         r"\bgit\s+(reset\s+--hard|clean\s+-f|push\s+.*--force)\b",
         r"\b(reg\s+delete|diskpart|bcdedit)\b",
     )
-    _read_only = (
-        "git status",
-        "git diff",
-        "git log",
-        "pwd",
-        "whoami",
-        "python --version",
-        "uv --version",
-    )
-    _shell_control = re.compile(r"[;&|`$<>\r\n]")
+    _auto_allowed = {
+        "pwd": ("pwd",),
+        "whoami": ("whoami",),
+        "python --version": ("python", "--version"),
+        "uv --version": ("uv", "--version"),
+    }
+
+    def auto_allowed_argv(self, command: str) -> tuple[str, ...] | None:
+        """Return fixed argv only for commands safe to run without a shell."""
+        has_unsupported_whitespace = any(
+            character.isspace() and character not in " \t" for character in command
+        )
+        if has_unsupported_whitespace:
+            return None
+        normalized = re.sub(r"[ \t]+", " ", command.lower()).strip()
+        return self._auto_allowed.get(normalized)
 
     def evaluate(self, command: str, approved: bool = False) -> CommandDecision:
-        normalized = " ".join(command.lower().split())
+        normalized = re.sub(r"[ \t]+", " ", command.lower()).strip()
         if any(re.search(pattern, normalized) for pattern in self._blocked):
             return CommandDecision.BLOCK
-        is_single_command = not self._shell_control.search(command)
-        is_read_only = any(
-            normalized == prefix or normalized.startswith(f"{prefix} ")
-            for prefix in self._read_only
-        )
-        if is_single_command and is_read_only:
+        if self.auto_allowed_argv(command) is not None:
             return CommandDecision.ALLOW
         return CommandDecision.ALLOW if approved else CommandDecision.REQUIRE_APPROVAL

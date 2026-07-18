@@ -11,7 +11,7 @@
 - **Voice control on Windows:** native speech recognition and synthesis through `System.Speech`; no voice package required.
 - **Device-less fallback:** when no speaker endpoint is available, speech is saved under `~/.faye/audio/` and the CLI prints its path.
 - **Model portability:** any OpenAI-compatible endpoint, including OpenRouter and local servers.
-- **Guarded execution:** read-only commands can run immediately; mutations require `--approve`; destructive commands remain blocked.
+- **Guarded execution:** a tiny exact allowlist of inert commands runs without a shell; all other non-destructive commands require `--approve`; destructive commands remain blocked.
 - **Honest identity:** Faye says she is AI and never claims tool execution without evidence.
 
 ## Quick start
@@ -46,14 +46,17 @@ uv run faye --agents 100 "Compare three architectures for a local voice assistan
 # Listen once through the default microphone and speak the response
 uv run faye --voice
 
-# Execute a read-only local command
-uv run faye --run "git status"
+# Execute an inert allowlisted command without shell parsing
+uv run faye --run "python --version"
+
+# Explicitly approve other non-destructive commands, including Git inspection
+uv run faye --run --approve "git status"
 
 # Explicitly approve a non-destructive mutation
 uv run faye --run --approve "mkdir sandbox"
 ```
 
-Destructive commands such as `git reset --hard`, force pushes, disk formatting, registry deletion, shutdown, and recursive root deletion are blocked even with `--approve`.
+Only exact `pwd`, `whoami`, `python --version`, and `uv --version` commands run without approval, using fixed argument vectors and no shell. Destructive commands such as `git reset --hard`, force pushes, disk formatting, registry deletion, shutdown, and recursive root deletion are blocked even with `--approve`.
 
 ## Speed model
 

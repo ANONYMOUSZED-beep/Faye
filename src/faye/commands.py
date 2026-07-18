@@ -26,9 +26,10 @@ class CommandExecutor:
             raise CommandRejected(
                 f"Command requires explicit approval before execution: {command!r}"
             )
+        safe_argv = self.policy.auto_allowed_argv(command)
         return subprocess.run(
-            command,
-            shell=True,
+            list(safe_argv) if safe_argv is not None else command,
+            shell=safe_argv is None,
             capture_output=True,
             text=True,
             timeout=self.timeout,
