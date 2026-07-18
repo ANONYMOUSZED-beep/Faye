@@ -49,7 +49,9 @@ def main() -> None:
         print(text)
         print(f"\n[{answer.tasks_completed} worker(s), {answer.elapsed_ms:.0f} ms]")
     if args.voice:
-        voice.speak(text)
+        voice_output = voice.speak(text)
+        if voice_output is not None:
+            print(f"[Voice saved to {voice_output}]")
 
 
 if __name__ == "__main__":

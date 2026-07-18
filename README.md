@@ -9,6 +9,7 @@
 - **Task deduplication:** equivalent work is collapsed before execution.
 - **Persistent improvement:** local SQLite memory stores interactions and explicit feedback, then applies relevant improvement hints later.
 - **Voice control on Windows:** native speech recognition and synthesis through `System.Speech`; no voice package required.
+- **Device-less fallback:** when no speaker endpoint is available, speech is saved under `~/.faye/audio/` and the CLI prints its path.
 - **Model portability:** any OpenAI-compatible endpoint, including OpenRouter and local servers.
 - **Guarded execution:** read-only commands can run immediately; mutations require `--approve`; destructive commands remain blocked.
 - **Honest identity:** Faye says she is AI and never claims tool execution without evidence.
