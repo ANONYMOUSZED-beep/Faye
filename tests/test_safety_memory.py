@@ -16,6 +16,22 @@ def test_allows_read_only_commands():
     assert policy.evaluate("git status", approved=False) is CommandDecision.ALLOW
 
 
+def test_read_only_command_chained_to_mutation_requires_approval():
+    policy = SafetyPolicy()
+
+    decision = policy.evaluate("git status && mkdir escaped", approved=False)
+
+    assert decision is CommandDecision.REQUIRE_APPROVAL
+
+
+def test_read_only_prefix_lookalike_requires_approval():
+    policy = SafetyPolicy()
+
+    decision = policy.evaluate("git statusmalicious", approved=False)
+
+    assert decision is CommandDecision.REQUIRE_APPROVAL
+
+
 def test_memory_records_feedback_and_returns_improvement_hint(tmp_path):
     memory = LearningMemory(tmp_path / "faye.db")
     memory.record_interaction("summarize this", "too long", score=-1, feedback="be concise")

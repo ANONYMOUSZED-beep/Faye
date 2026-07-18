@@ -30,11 +30,17 @@ class SafetyPolicy:
         "python --version",
         "uv --version",
     )
+    _shell_control = re.compile(r"[;&|`$<>\r\n]")
 
     def evaluate(self, command: str, approved: bool = False) -> CommandDecision:
         normalized = " ".join(command.lower().split())
         if any(re.search(pattern, normalized) for pattern in self._blocked):
             return CommandDecision.BLOCK
-        if any(normalized.startswith(prefix) for prefix in self._read_only):
+        is_single_command = not self._shell_control.search(command)
+        is_read_only = any(
+            normalized == prefix or normalized.startswith(f"{prefix} ")
+            for prefix in self._read_only
+        )
+        if is_single_command and is_read_only:
             return CommandDecision.ALLOW
         return CommandDecision.ALLOW if approved else CommandDecision.REQUIRE_APPROVAL
