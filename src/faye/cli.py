@@ -27,13 +27,15 @@ def main() -> None:
     parser.add_argument(
         "--approve",
         action="store_true",
-        help="approve a non-destructive mutating command used with --run",
+        help="confirm a command request; the closed executable allowlist is unchanged",
     )
     parser.add_argument("--agents", type=int, default=100, help="maximum concurrent agents (1-100)")
     args = parser.parse_args()
-    agent = build_agent(args.agents)
-    voice = WindowsVoice()
-    command = voice.listen() if args.voice else " ".join(args.prompt).strip()
+    if args.voice and args.run:
+        parser.error("--voice cannot be combined with --run")
+
+    voice = WindowsVoice() if args.voice else None
+    command = voice.listen() if voice is not None else " ".join(args.prompt).strip(" \t")
     if not command:
         parser.error("provide a prompt or use --voice")
     if args.run:
@@ -44,6 +46,7 @@ def main() -> None:
         text = (result.stdout or result.stderr).strip() or f"Command exited {result.returncode}."
         print(text)
     else:
+        agent = build_agent(args.agents)
         answer = agent.execute(command)
         text = answer.text
         print(text)

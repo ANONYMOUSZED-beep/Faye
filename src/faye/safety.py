@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import enum
 import re
+import shlex
 
 
 class CommandDecision(enum.Enum):
@@ -14,18 +15,20 @@ class SafetyPolicy:
     """Conservative local-command policy; model text cannot override it."""
 
     _blocked = (
-        r"\brm\s+-[^\n]*r[^\n]*f\s+[/~]",
-        r"\bformat\s+[a-z]:",
-        r"\bdel\s+/[fsq].*\\",
-        r"\b(shutdown|reboot)\b",
-        r"\bgit\s+(reset\s+--hard|clean\s+-f|push\s+.*--force)\b",
-        r"\b(reg\s+delete|diskpart|bcdedit)\b",
+        re.compile(r"\brm\s+-[^\n]*r[^\n]*f\s+[/~]"),
+        re.compile(r"\bformat\s+[a-z]:"),
+        re.compile(r"\bdel\s+/[fsq].*\\"),
+        re.compile(r"\b(shutdown|reboot)\b"),
+        re.compile(r"\bgit\s+reset\s+--hard\b"),
+        re.compile(r"\bgit\s+clean\b.*(-f|--force)"),
+        re.compile(r"\bgit\s+push\b.*(-f|--force)"),
+        re.compile(r"\b(reg\s+delete|diskpart|bcdedit)\b"),
     )
+
     _auto_allowed = {
         "pwd": ("pwd",),
         "whoami": ("whoami",),
         "python --version": ("python", "--version"),
-        "uv --version": ("uv", "--version"),
     }
 
     def auto_allowed_argv(self, command: str) -> tuple[str, ...] | None:
@@ -35,13 +38,28 @@ class SafetyPolicy:
         )
         if has_unsupported_whitespace:
             return None
-        normalized = re.sub(r"[ \t]+", " ", command.lower()).strip()
+        normalized = re.sub(r"[ \t]+", " ", command).strip()
         return self._auto_allowed.get(normalized)
+
+    def parse_argv(self, command: str) -> list[str] | None:
+        """Parse command into argv using POSIX shell rules. Returns None if unparseable."""
+        try:
+            return shlex.split(command)
+        except ValueError:
+            return None
 
     def evaluate(self, command: str, approved: bool = False) -> CommandDecision:
         normalized = re.sub(r"[ \t]+", " ", command.lower()).strip()
-        if any(re.search(pattern, normalized) for pattern in self._blocked):
+
+        if any(pattern.search(normalized) for pattern in self._blocked):
             return CommandDecision.BLOCK
+
+        argv = self.parse_argv(command)
+        if argv:
+            reconstructed = " ".join(argv).lower()
+            if any(pattern.search(reconstructed) for pattern in self._blocked):
+                return CommandDecision.BLOCK
+
         if self.auto_allowed_argv(command) is not None:
             return CommandDecision.ALLOW
-        return CommandDecision.ALLOW if approved else CommandDecision.REQUIRE_APPROVAL
+        return CommandDecision.BLOCK if approved else CommandDecision.REQUIRE_APPROVAL

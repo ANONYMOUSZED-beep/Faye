@@ -77,4 +77,4 @@ class WindowsVoice:
             capture_output=True,
             text=True,
         )
-        return result.stdout.strip()
+        return result.stdout.rstrip("\r\n")

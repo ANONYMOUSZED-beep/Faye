@@ -1,4 +1,5 @@
 import subprocess
+from types import SimpleNamespace
 
 from faye.voice import WindowsVoice
 
@@ -40,3 +41,12 @@ def test_windows_voice_falls_back_to_wave_file_when_audio_device_is_missing(tmp_
 
     assert output == tmp_path / "faye.wav"
     assert "SetOutputToWaveFile" in calls[1][-1]
+
+
+def test_listen_preserves_unsupported_edge_whitespace():
+    recognized = "\u00a0pwd\u00a0"
+
+    def runner(*args, **kwargs):
+        return SimpleNamespace(stdout=f"{recognized}\r\n")
+
+    assert WindowsVoice(runner=runner).listen() == recognized

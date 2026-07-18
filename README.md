@@ -11,7 +11,7 @@
 - **Voice control on Windows:** native speech recognition and synthesis through `System.Speech`; no voice package required.
 - **Device-less fallback:** when no speaker endpoint is available, speech is saved under `~/.faye/audio/` and the CLI prints its path.
 - **Model portability:** any OpenAI-compatible endpoint, including OpenRouter and local servers.
-- **Guarded execution:** a tiny exact allowlist of inert commands runs without a shell; all other non-destructive commands require `--approve`; destructive commands remain blocked.
+- **Guarded execution:** a tiny, case-sensitive allowlist of inert commands runs entirely in-process; approval never widens it, and every other command remains blocked.
 - **Honest identity:** Faye says she is AI and never claims tool execution without evidence.
 
 ## Quick start
@@ -49,14 +49,11 @@ uv run faye --voice
 # Execute an inert allowlisted command without shell parsing
 uv run faye --run "python --version"
 
-# Explicitly approve other non-destructive commands, including Git inspection
-uv run faye --run --approve "git status"
-
-# Explicitly approve a non-destructive mutation
-uv run faye --run --approve "mkdir sandbox"
+# Approval never widens the closed executable allowlist
+uv run faye --run --approve "git status"  # blocked
 ```
 
-Only exact `pwd`, `whoami`, `python --version`, and `uv --version` commands run without approval, using fixed argument vectors and no shell. Destructive commands such as `git reset --hard`, force pushes, disk formatting, registry deletion, shutdown, and recursive root deletion are blocked even with `--approve`.
+Only exact `pwd`, `whoami`, and `python --version` can run, and all three are implemented entirely in-process; the command gateway never launches a subprocess. Approval never widens this closed allowlist. Arbitrary programs, interpreters, mutations, uv, and every Git operation are blocked; future actions must use dedicated capability APIs with operation-specific validation.
 
 ## Speed model
 
@@ -98,7 +95,7 @@ Voice / CLI
     |
     +-- local SQLite learning memory
     |
-    +-- command safety policy -> timeout-bound process execution
+    +-- command safety policy -> closed in-process command gateway
 ```
 
 | Module | Responsibility |
@@ -108,7 +105,7 @@ Voice / CLI
 | `memory.py` | SQLite interaction and feedback memory |
 | `voice.py` | Native Windows speech input/output |
 | `safety.py` | Deterministic command classification |
-| `commands.py` | Approval-gated, timeout-bound execution |
+| `commands.py` | Closed, in-process execution of three inert operations |
 | `cli.py` | Text, voice, and command entry points |
 
 ## Verify
