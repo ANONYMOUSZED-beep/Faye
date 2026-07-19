@@ -2,66 +2,119 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 from pathlib import Path
 
+from faye.agent import AgentRuntime
+from faye.commands import CommandExecutor, CommandRejected
+from faye.orchestrator import BoundedOrchestrator
+from faye.provider import OpenAICompatibleModel
+from faye.voice import WindowsVoice
+from faye.workspace import build_workspace_capabilities
 
-def _default_hermes_home() -> Path:
-    configured = os.environ.get("HERMES_HOME", "").strip()
-    return Path(configured).expanduser() if configured else Path.home() / ".hermes"
+
+def _agent_count(value: str) -> int:
+    count = int(value)
+    if not 1 <= count <= 100:
+        raise argparse.ArgumentTypeError("must be between 1 and 100")
+    return count
 
 
-def _migrate_hermes(argv: list[str]) -> None:
-    from faye.runtime import (
-        bootstrap_faye_home,
-        default_faye_home,
-        migrate_hermes_state,
-        validate_migration_paths,
-    )
+def build_agent(max_agents: int) -> BoundedOrchestrator:
+    state = Path(os.getenv("FAYE_STATE", Path.home() / ".faye" / "memory.db"))
+    return BoundedOrchestrator(OpenAICompatibleModel(), state, max_agents=max_agents)
 
-    parser = argparse.ArgumentParser(
-        prog="faye migrate-hermes",
-        description=(
-            "Copy Hermes state into Faye without modifying Hermes or overwriting Faye files."
-        ),
+
+def build_coding_agent(
+    workspace: Path, max_turns: int, allow_writes: bool = False
+) -> AgentRuntime:
+    return AgentRuntime(
+        model=OpenAICompatibleModel(),
+        capabilities=build_workspace_capabilities(workspace, allow_writes=allow_writes),
+        max_turns=max_turns,
     )
-    parser.add_argument(
-        "--source",
-        type=Path,
-        default=_default_hermes_home(),
-        help="Hermes state directory (default: HERMES_HOME or ~/.hermes)",
-    )
-    parser.add_argument(
-        "--destination",
-        type=Path,
-        default=default_faye_home(),
-        help="Faye state directory (default: FAYE_HOME or the platform default)",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Report copy/skip counts without writing files",
-    )
-    args = parser.parse_args(argv)
-    validate_migration_paths(args.source, args.destination)
-    if not args.dry_run:
-        bootstrap_faye_home(args.destination)
-    result = migrate_hermes_state(args.source, args.destination, dry_run=args.dry_run)
-    verb = "Would copy" if args.dry_run else "Copied"
-    print(f"{verb} {result.copied} file(s); skip {result.skipped} existing file(s).")
-    print(f"Hermes source unchanged: {args.source.expanduser().resolve()}")
-    print(f"Faye state: {args.destination.expanduser().resolve()}")
 
 
 def main() -> None:
-    """Launch Faye or handle a Faye distribution command."""
-    if len(sys.argv) > 1 and sys.argv[1] == "migrate-hermes":
-        _migrate_hermes(sys.argv[2:])
-        return
+    parser = argparse.ArgumentParser(prog="faye", description="Fast voice-first multi-agent AI")
+    parser.add_argument("prompt", nargs="*", help="request for Faye")
+    parser.add_argument("--voice", action="store_true", help="listen once and speak the answer")
+    parser.add_argument(
+        "--agent",
+        action="store_true",
+        help="use the bounded workspace agent with typed capabilities",
+    )
+    parser.add_argument(
+        "--workspace",
+        type=Path,
+        default=Path.cwd(),
+        help="workspace root for agent capabilities (default: current directory)",
+    )
+    parser.add_argument(
+        "--max-turns",
+        type=int,
+        default=12,
+        help="maximum model turns in agent mode (default: 12)",
+    )
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="allow agent mode to atomically write bounded workspace files",
+    )
+    parser.add_argument(
+        "--run",
+        action="store_true",
+        help="execute the prompt as a local command instead of sending it to the model",
+    )
+    parser.add_argument(
+        "--approve",
+        action="store_true",
+        help="confirm a command request; the closed executable allowlist is unchanged",
+    )
+    parser.add_argument(
+        "--agents",
+        type=_agent_count,
+        default=100,
+        help="maximum concurrent agents (1-100)",
+    )
+    args = parser.parse_args()
+    if args.voice and args.run:
+        parser.error("--voice cannot be combined with --run")
+    if args.agent and args.run:
+        parser.error("--agent cannot be combined with --run")
+    if args.write and not args.agent:
+        parser.error("--write requires --agent")
+    if args.max_turns < 1:
+        parser.error("--max-turns must be positive")
 
-    from faye.runtime import run_engine
-
-    run_engine()
+    voice = WindowsVoice() if args.voice else None
+    command = voice.listen() if voice is not None else " ".join(args.prompt).strip(" \t")
+    if not command:
+        parser.error("provide a prompt or use --voice")
+    if args.run:
+        try:
+            result = CommandExecutor().run(command, approved=args.approve)
+        except CommandRejected as exc:
+            parser.error(str(exc))
+        text = (result.stdout or result.stderr).strip() or f"Command exited {result.returncode}."
+        print(text)
+    elif args.agent:
+        runtime = build_coding_agent(
+            args.workspace.resolve(), args.max_turns, allow_writes=args.write
+        )
+        result = runtime.run(command)
+        text = result.text
+        print(text)
+        print(f"\n[{len(result.audit)} tool call(s), {result.turns} turn(s)]")
+    else:
+        agent = build_agent(args.agents)
+        answer = agent.execute(command)
+        text = answer.text
+        print(text)
+        print(f"\n[{answer.tasks_completed} worker(s), {answer.elapsed_ms:.0f} ms]")
+    if args.voice:
+        voice_output = voice.speak(text)
+        if voice_output is not None:
+            print(f"[Voice saved to {voice_output}]")
 
 
 if __name__ == "__main__":
