@@ -250,6 +250,13 @@ def test_engine_children_route_through_faye(tmp_path, monkeypatch):
     assert "faye.child_entry" in gateway._gateway_run_args_for_profile("demo")
     assert "faye.child_entry" in gateway._gateway_run_command()
 
+    systemd_unit = gateway.generate_systemd_unit()
+    launchd_plist = gateway.generate_launchd_plist()
+    assert "-m faye.child_entry" in systemd_unit
+    assert "-m hermes_cli.main" not in systemd_unit
+    assert "<string>faye.child_entry</string>" in launchd_plist
+    assert "<string>hermes_cli.main</string>" not in launchd_plist
+
     script = gateway_windows._build_gateway_cmd_script(
         sys.executable, str(tmp_path), str(tmp_path), ""
     )
@@ -260,6 +267,25 @@ def test_engine_children_route_through_faye(tmp_path, monkeypatch):
         argv, _working_dir, env = gateway_windows._build_gateway_argv()
         assert "faye.child_entry" in argv
         assert env["FAYE_HOME"] == env["HERMES_HOME"]
+
+        elevated: dict[str, str] = {}
+
+        def shell_execute(_hwnd, _verb, executable, parameters, cwd, _show):
+            elevated.update(
+                executable=executable,
+                parameters=parameters,
+                cwd=cwd,
+            )
+            return 42
+
+        monkeypatch.setattr(
+            gateway_windows.ctypes.windll.shell32,
+            "ShellExecuteW",
+            shell_execute,
+        )
+        assert gateway_windows._launch_elevated_gateway_command("install")
+        assert "faye.child_entry" in elevated["parameters"]
+        assert "hermes_cli.main" not in elevated["parameters"]
 
 
 def test_engine_lifecycle_commands_fail_closed(capsys):

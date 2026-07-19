@@ -437,6 +437,19 @@ def patch_engine_subprocesses() -> None:
         gateway_argv.__faye_wrapper__ = True  # type: ignore[attr-defined]
         setattr(gateway, name, gateway_argv)
 
+    for name in ("generate_systemd_unit", "generate_launchd_plist"):
+        current = getattr(gateway, name)
+        if getattr(current, "__faye_wrapper__", False):
+            continue
+
+        def gateway_service(*args: Any, _current: Any = current, **kwargs: Any) -> str:
+            return _current(*args, **kwargs).replace(
+                "hermes_cli.main", "faye.child_entry"
+            )
+
+        gateway_service.__faye_wrapper__ = True  # type: ignore[attr-defined]
+        setattr(gateway, name, gateway_service)
+
     for name in ("_build_gateway_cmd_script", "_build_gateway_vbs_script"):
         current = getattr(gateway_windows, name)
         if getattr(current, "__faye_wrapper__", False):
@@ -465,6 +478,50 @@ def patch_engine_subprocesses() -> None:
 
         build_gateway_argv.__faye_wrapper__ = True  # type: ignore[attr-defined]
         gateway_windows._build_gateway_argv = build_gateway_argv
+
+    current_elevated = gateway_windows._launch_elevated_gateway_command
+    if not getattr(current_elevated, "__faye_wrapper__", False):
+
+        def launch_elevated_gateway_command(
+            command: str, extra_args: list[str] | None = None
+        ) -> bool:
+            gateway_windows._assert_windows()
+            args = [
+                "-m",
+                "faye.child_entry",
+                *gateway_windows._current_profile_cli_args(),
+                "gateway",
+                command,
+            ]
+            if extra_args:
+                args.extend(extra_args)
+            params = gateway_windows.subprocess.list2cmdline(args)
+            cwd = str(Path(gateway_windows.__file__).resolve().parent.parent)
+            elevated_python = gateway_windows._derive_venv_pythonw(sys.executable)
+            try:
+                result = gateway_windows.ctypes.windll.shell32.ShellExecuteW(
+                    None,
+                    "runas",
+                    elevated_python,
+                    params,
+                    cwd,
+                    0,
+                )
+            except Exception as exc:
+                print(f"⚠ Could not launch elevated gateway {command} prompt: {exc}")
+                return False
+            if result <= 32:
+                print(
+                    f"⚠ Elevated gateway {command} prompt was not started "
+                    f"(ShellExecuteW={result})"
+                )
+                return False
+            return True
+
+        launch_elevated_gateway_command.__faye_wrapper__ = True  # type: ignore[attr-defined]
+        gateway_windows._launch_elevated_gateway_command = (
+            launch_elevated_gateway_command
+        )
 
 
 def validate_engine() -> None:
