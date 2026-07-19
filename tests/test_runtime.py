@@ -303,6 +303,7 @@ def test_migrate_hermes_cli_dry_run(tmp_path):
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env=env,
         timeout=90,
     )
@@ -331,6 +332,7 @@ def test_migrate_hermes_cli_validates_overlap_before_bootstrap(tmp_path):
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env=env,
         timeout=90,
     )
@@ -373,6 +375,7 @@ def test_unconfigured_interactive_start_uses_faye_setup_guidance(tmp_path):
         input="/exit\n",
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env=env,
         timeout=90,
     )
@@ -393,6 +396,7 @@ def test_status_recommends_faye_commands(tmp_path):
         [sys.executable, "-m", "faye.cli", "status"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env=env,
         timeout=90,
     )
@@ -413,6 +417,7 @@ def test_real_faye_cli_smoke(arguments, tmp_path):
         [sys.executable, "-m", "faye.cli", *arguments],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env=env,
         timeout=90,
     )
