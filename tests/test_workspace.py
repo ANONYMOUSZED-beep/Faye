@@ -1,3 +1,4 @@
+import errno
 import json
 import os
 import stat
@@ -9,6 +10,14 @@ import pytest
 import faye.workspace as workspace_module
 from faye.capabilities import CapabilityError
 from faye.workspace import build_workspace_capabilities
+
+
+@pytest.mark.parametrize("error_number", [errno.ELOOP, errno.ENOTDIR])
+def test_posix_nofollow_errors_are_classified_as_workspace_escapes(error_number):
+    error = OSError(error_number, "nofollow blocked path")
+
+    with pytest.raises(CapabilityError, match="^path escapes the workspace$"):
+        workspace_module._raise_posix_path_escape(error)
 
 
 def test_workspace_read_file_returns_numbered_bounded_text(tmp_path):

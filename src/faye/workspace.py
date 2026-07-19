@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import errno
 import json
 import os
 import secrets
@@ -97,6 +98,11 @@ def _verify_windows_handle(stream: Any, root: Path) -> None:
 
 class _ReadLimitExceeded(OSError):
     """Raised before a bounded operation reads past its remaining budget."""
+
+
+def _raise_posix_path_escape(exc: OSError) -> None:
+    if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
+        raise CapabilityError("path escapes the workspace") from exc
 
 
 _WINDOWS_DIRECTORY_ACCESS = 0x0001 | 0x0040 | 0x0080 | 0x00010000
@@ -276,6 +282,7 @@ def _read_workspace_bytes(
         except (CapabilityError, _ReadLimitExceeded):
             raise
         except OSError as exc:
+            _raise_posix_path_escape(exc)
             raise CapabilityError(f"workspace file could not be read: {normalized}") from exc
         finally:
             _close_posix_descriptors(file_fd, parent_fd)
@@ -714,6 +721,7 @@ def build_workspace_capabilities(
                     root_fd, search_parts, file_glob
                 )
             except OSError as exc:
+                _raise_posix_path_escape(exc)
                 raise CapabilityError(f"workspace path not found: {relative_path}") from exc
         else:
             search_root, search_normalized = _workspace_path(
@@ -821,6 +829,8 @@ def build_workspace_capabilities(
             except CapabilityError:
                 raise
             except OSError as exc:
+                if os.name == "posix":
+                    _raise_posix_path_escape(exc)
                 raise CapabilityError(
                     f"workspace file could not be written: {normalized}"
                 ) from exc
