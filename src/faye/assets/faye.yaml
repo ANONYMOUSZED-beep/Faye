@@ -1,0 +1,59 @@
+name: faye
+description: Faye production distribution
+colors:
+  banner_border: "#7C3AED"
+  banner_title: "#F472B6"
+  banner_accent: "#A78BFA"
+  banner_dim: "#6D5A8D"
+  banner_text: "#F5E9FF"
+  ui_accent: "#A78BFA"
+  ui_label: "#F472B6"
+  ui_ok: "#4ADE80"
+  ui_error: "#FB7185"
+  ui_warn: "#FBBF24"
+  prompt: "#F5E9FF"
+  input_rule: "#7C3AED"
+  response_border: "#F472B6"
+  status_bar_bg: "#171122"
+  status_bar_text: "#E9D5FF"
+  status_bar_strong: "#F472B6"
+  status_bar_dim: "#8B7AA8"
+  status_bar_good: "#4ADE80"
+  status_bar_warn: "#FBBF24"
+  status_bar_bad: "#FB923C"
+  status_bar_critical: "#FB7185"
+  session_label: "#A78BFA"
+  session_border: "#6D5A8D"
+branding:
+  agent_name: "Faye"
+  welcome: "Faye online. Type your message or /help for commands."
+  goodbye: "Faye offline. See you, space cowboy."
+  response_label: " ✦ Faye "
+  prompt_symbol: "✦"
+  help_header: "✦ Faye Commands"
+tool_prefix: "┊"
+spinner:
+  waiting_faces: ["(✦)", "(⌁)", "(◈)"]
+  thinking_faces: ["(✦)", "(⌁)", "(◈)"]
+  thinking_verbs: ["plotting", "tracking", "working", "connecting the dots"]
+banner_logo: |-
+  [bold #F472B6]███████╗ █████╗ ██╗   ██╗███████╗[/]
+  [bold #A78BFA]██╔════╝██╔══██╗╚██╗ ██╔╝██╔════╝[/]
+  [#A78BFA]█████╗  ███████║ ╚████╔╝ █████╗[/]
+  [#7C3AED]██╔══╝  ██╔══██║  ╚██╔╝  ██╔══╝[/]
+  [#6D5A8D]██║     ██║  ██║   ██║   ███████╗[/]
+  [#6D5A8D]╚═╝     ╚═╝  ╚═╝   ╚═╝   ╚══════╝[/]
+banner_hero: |-
+  [#6D5A8D]╭───────✦───────╮[/]
+  [#A78BFA]│ ░▒▓ SIGNAL ▓▒░ │[/]
+  [#A78BFA]│   ╭───────╮   │[/]
+  [#F472B6]│  ╱▒▒▒▒▒▒▒▒▒╲  │[/]
+  [#F472B6]│ ╱▒╭─────╮▒╲ │[/]
+  [#F5E9FF]│ │▒│ ◈   ◈ │▒│ │[/]
+  [#F5E9FF]│ │▒│   ▴   │▒│ │[/]
+  [#F5E9FF]│ │▒│ ╰───╯ │▒│ │[/]
+  [#F472B6]│ ╲▒╰──┬──╯▒╱ │[/]
+  [#F472B6]│  ╲▒▒╭┴╮▒▒╱  │[/]
+  [#A78BFA]│   ╰─╯ ╰─╯   │[/]
+  [bold #F472B6]│ F A Y E // 01 │[/]
+  [bold #4ADE80]╰── ONLINE ──────╯[/]

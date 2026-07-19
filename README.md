@@ -1,26 +1,25 @@
 # Faye
 
-**Faye is a bounded coding agent, everyday AI assistant, and concurrent multi-agent orchestrator.** The product direction is an extensible alternative to Hermes Agent, Claude Code, and Codex CLI, with voice, desktop, integrations, and personal-assistant capabilities. She is explicitly software—not a human or a claim of consciousness—and her concise, sharp, resourceful voice is inspired by the broad character traits of Faye Valentine without impersonating her or copying dialogue.
+Faye is a production autonomous AI assistant distributed on top of the full [Hermes Agent](https://github.com/NousResearch/hermes-agent) runtime by Nous Research. It provides the mature interactive agent, coding and everyday tools, sessions, memory, skills, cron, profiles, plugins, MCP, voice, browser automation, gateways, and provider support under a dedicated `faye` executable and isolated `~/.faye` state.
 
-## What works
+Faye is a distribution boundary, not a cosmetic shell alias:
 
-- **Fast path:** greetings and identity questions answer locally in milliseconds without an API call.
-- **Bounded swarm:** complex requests are decomposed into the fewest useful tasks and run concurrently with a hard limit of 100 workers.
-- **Typed agent loop:** OpenAI-compatible models can request registered capabilities, receive structured results, and continue reasoning for at most 12 turns and 32 tool calls per run.
-- **Read-only coding capability:** `read_file` reads UTF-8 line ranges from an explicit workspace, rejects source files over 262,144 bytes and responses over 65,536 characters, and uses lexical plus canonical path checks to reject absolute paths, Windows drive/stream syntax, traversal, and symlink escapes.
-- **Auditable failures:** every attempted capability call records its typed request, success state, and structured result; unknown tools and invalid arguments never widen the registry.
-- **Task deduplication:** equivalent work is collapsed before execution.
-- **Bounded conversation memory:** local SQLite memory persists recent turns while model context stays capped at 12,000 characters and retains only complete newest turns.
-- **Persistent improvement:** explicit feedback is stored locally and applied later when it fits the same context budget.
-- **Voice control on Windows:** native speech recognition and synthesis through `System.Speech`; no voice package required.
-- **Device-less fallback:** when no speaker endpoint is available, speech is saved under `~/.faye/audio/` and the CLI prints its path.
-- **Model portability:** any OpenAI-compatible endpoint, including OpenRouter and local servers.
-- **Guarded execution:** a tiny, case-sensitive allowlist of inert commands runs entirely in-process; approval never widens it, and every other command remains blocked.
-- **Honest identity:** Faye says she is AI and never claims tool execution without evidence.
+- `hermes-agent[all]==0.18.2` is exact-pinned for reproducible behavior.
+- Faye establishes `HERMES_HOME=FAYE_HOME` before importing the engine.
+- Foreign Hermes checkout paths inherited through `PYTHONPATH` are removed without deleting unrelated Python paths.
+- First-run Faye identity, skin, and config assets are installed non-destructively.
+- The complete upstream command surface is delegated unchanged and shown under `faye`.
+- Engine incompatibility fails closed instead of silently loading another Hermes version.
 
-## Quick start
+Hermes Agent remains the credited production engine. Its current feature documentation is authoritative for engine behavior: https://hermes-agent.nousresearch.com/docs
 
-Requirements: Windows 10/11, Python 3.11+, and [uv](https://docs.astral.sh/uv/).
+## Requirements
+
+- Python 3.11–3.13
+- Windows, Linux, or macOS
+- [`uv`](https://docs.astral.sh/uv/) for the source installation below
+
+## Install from source
 
 ```bash
 git clone https://github.com/ANONYMOUSZED-beep/Faye.git
@@ -28,133 +27,128 @@ cd Faye
 uv sync --extra dev
 ```
 
-Configure an OpenAI-compatible provider in your shell:
+Run Faye from the repository:
 
 ```bash
-export FAYE_API_KEY="your-key"
-export FAYE_BASE_URL="https://openrouter.ai/api/v1"
-export FAYE_MODEL="openai/gpt-4o-mini"
+uv run faye --version
+uv run faye setup
+uv run faye
 ```
 
-On PowerShell, use `$env:FAYE_API_KEY="your-key"` instead. Do not commit `.env`; it is ignored.
-
-## Use
+To install the `faye` command into an isolated global tool environment:
 
 ```bash
-# Local fast path—does not require a model key
-uv run faye "hello"
-
-# AI request; Faye chooses the useful worker count up to the limit
-uv run faye --agents 100 "Compare three architectures for a local voice assistant"
-
-# Bounded coding-agent loop with read-only access to this repository
-uv run faye --agent --workspace . --max-turns 12 "Inspect the agent runtime"
-
-# Listen once through the default microphone and speak the response
-uv run faye --voice
-
-# Execute an inert allowlisted command without shell parsing
-uv run faye --run "python --version"
-
-# Approval never widens the closed executable allowlist
-uv run faye --run --approve "git status"  # blocked
+uv tool install .
+faye --version
+faye setup
 ```
 
-Only exact `pwd`, `whoami`, and `python --version` can run, and all three are implemented entirely in-process; the command gateway never launches a subprocess. Approval never widens this closed allowlist. Arbitrary programs, interpreters, mutations, uv, and every Git operation are blocked; future actions must use dedicated capability APIs with operation-specific validation.
+## First run
 
-Agent mode does not use that command gateway and does not expose a generic shell. Its current registry contains only workspace-confined `read_file`. Tool output is returned to the model as untrusted data, and oversized tool batches are rejected atomically before any handler runs.
+```bash
+# Configure model/provider, terminal, tools, agent, and gateway
+faye setup
 
-## Speed model
+# Check configuration and runtime health
+faye doctor
+faye status
 
-Faye does **not** wake all 100 workers for every message. That would be slower and wasteful.
-
-1. Deterministic fast paths handle trivial commands with zero network latency.
-2. The planner creates only the independent tasks needed.
-3. Normalized duplicate tasks are removed.
-4. Workers fan out through a bounded thread pool.
-5. Results are synthesized once.
-
-`--agents 100` is capacity, not mandatory fan-out. Lower it on constrained hardware or strict provider rate limits.
-
-## Self-improvement
-
-`LearningMemory` stores data in `~/.faye/memory.db` by default. The orchestrator supplies up to six recent complete turns to the model in chronological order, retaining the newest turns that fit within a 12,000-character budget. The public API can record corrections:
-
-```python
-agent.learn(
-    prompt="summarize the report",
-    response="previous response",
-    feedback="Use five bullets and put the decision first.",
-    score=-1,
-)
+# Start the continuous interactive assistant
+faye
 ```
 
-Relevant negative feedback becomes context for future tasks. This is controlled prompt adaptation—not autonomous model-weight modification or unreviewed self-rewriting. Delete the SQLite file to reset learned history.
-
-## Architecture
+Faye creates these assets only when missing:
 
 ```text
-Voice / CLI
-    |
-    +-- deterministic fast path
-    |
-    +-- bounded agent loop -> typed registry -> workspace read_file
-    |          |                                  |
-    |          +-- audit log                      +-- canonical containment
-    |          +-- turn/action budgets
-    |
-    +-- planner -> deduplicate -> bounded pool (1..100 mini-agents)
-                                      |
-                                      +-> synthesize final answer
-    |
-    +-- local SQLite learning memory
-    |
-    +-- command safety policy -> closed in-process command gateway
+~/.faye/
+├── config.yaml
+├── SOUL.md
+├── skins/faye.yaml
+├── state.db
+├── sessions/
+├── skills/
+├── cron/
+└── profiles/
 ```
 
-| Module | Responsibility |
-|---|---|
-| `orchestrator.py` | Planning, deduplication, concurrent execution, synthesis |
-| `agent.py` | Bounded model → capability → model loop and audit trail |
-| `capabilities.py` | Closed typed registry, JSON schemas, and argument validation |
-| `workspace.py` | Workspace-confined, bounded file capabilities |
-| `provider.py` | Dependency-free OpenAI-compatible text/tool client and persona |
-| `memory.py` | SQLite interaction and feedback memory |
-| `voice.py` | Native Windows speech input/output |
-| `safety.py` | Deterministic command classification |
-| `commands.py` | Closed, in-process execution of three inert operations |
-| `cli.py` | Text, voice, and command entry points |
+Existing files are never overwritten during bootstrap. Set `FAYE_HOME` to use another state root. Faye always overrides an inherited `HERMES_HOME` inside its process, preventing accidental reads or writes to Hermes state.
 
-## Product roadmap
+## Commands
 
-The current release is the secure read-only foundation, not the finished product. Planned capability families are added as typed APIs—never by exposing an unrestricted shell:
-
-1. **Coding:** file search, patch/write operations, repository status/diff, and allowlisted build/test runners with workspace scopes, output limits, dry runs, and mutation approvals.
-2. **Autonomy:** plans, checkpoints, resumable tasks, budgets, cancellation, subagents, background jobs, and durable audit logs.
-3. **Everyday assistant:** web/browser tools, email, calendar, notes, reminders, documents, and user-controlled long-term memory.
-4. **Multimodal interaction:** richer voice sessions, images, screen context, and consent-scoped desktop control.
-5. **Extensibility:** provider adapters, plugins/skills, MCP-style integrations, per-capability permissions, and isolated execution backends.
-
-Each milestone must preserve typed schemas, least privilege, explicit workspace/resource scopes, bounded execution, untrusted-output handling, and tests for rejection paths.
-
-## Verify
+Faye preserves the full engine command surface. Representative commands:
 
 ```bash
+faye                         # interactive agent
+faye chat -q "Fix the failing tests"  # one-shot task
+faye setup                   # setup wizard
+faye model                   # provider/model picker
+faye tools                   # tool configuration
+faye skills list             # skills
+faye sessions list           # sessions
+faye cron list               # scheduled jobs
+faye profile list            # isolated profiles
+faye mcp list                # MCP servers
+faye plugins list            # plugins
+faye gateway setup           # messaging platforms
+faye gateway run             # foreground gateway
+faye doctor                  # diagnostics
+faye status                  # component status
+```
+
+Run `faye --help`, `faye <command> --help`, or consult the [Hermes Agent docs](https://hermes-agent.nousresearch.com/docs) for the complete runtime reference.
+
+## Migrate existing Hermes state
+
+Migration is explicit, copy-only, and non-destructive. Existing Faye files win; Hermes source files are never changed.
+
+```bash
+# Preview counts without creating or changing Faye state
+faye migrate-hermes --dry-run
+
+# Copy from HERMES_HOME or ~/.hermes into FAYE_HOME or ~/.faye
+faye migrate-hermes
+
+# Use explicit locations
+faye migrate-hermes --source /path/to/.hermes --destination /path/to/.faye
+```
+
+Source symlinks are skipped; destination symlinks and Windows reparse points are rejected. Overlapping source/destination roots are rejected before Faye creates any files, and existing destination files are not overwritten. Review migrated credentials and gateway configuration before starting background services.
+
+## Profiles and subprocesses
+
+Because Faye establishes the engine state boundary in the process environment before any engine import, child agents, cron workers, gateways, profiles, and engine-launched subprocesses inherit Faye’s root. Named profiles live under `~/.faye/profiles/<name>/`.
+
+## Upgrade model
+
+Faye pins an exact Hermes Agent release. Upgrades are deliberate code changes: update the pin and compatibility constant together, regenerate `uv.lock`, run the full release gate, inspect artifacts, and review upstream changes before publishing. Faye refuses to run against a mismatched engine version.
+
+The engine-owned `faye update` and `faye uninstall` commands intentionally fail closed because they could mutate or remove the exact-pinned runtime independently of Faye. Upgrade or remove the distribution as one unit with `uv tool upgrade faye-agent` or `uv tool uninstall faye-agent` (or the equivalent command for your installation method).
+
+## Security
+
+Faye inherits Hermes Agent’s approval, secret-redaction, toolset, terminal-backend, and provider controls. Useful checks:
+
+```bash
+faye doctor
+faye security
+faye config set security.redact_secrets true
+```
+
+Agent tools can execute code and mutate files when enabled. Use the least-privilege toolsets and terminal backend appropriate for your environment. Keep credentials in Faye’s `.env`/auth mechanisms, never in source control.
+
+Migration deliberately copies credentials if present; it does not print their contents. The source remains unchanged.
+
+## Development and verification
+
+```bash
+uv sync --extra dev
 uv run pytest
 uv run ruff check .
 uv build
 ```
 
-CI runs those checks on Windows and Linux with Python 3.11 and 3.12.
+CI runs tests, Ruff, and builds on Windows and Linux with Python 3.11 and 3.12.
 
-## Security and privacy
+## Attribution and license
 
-- Secrets are read from environment variables and never persisted by Faye.
-- Memory stays local in SQLite.
-- Model output cannot override the deterministic command safety policy.
-- Voice recognition uses Windows' local `System.Speech` API.
-- Review any third-party model provider's data policy before sending sensitive content.
-
-## License
-
-MIT
+Faye’s distribution code is MIT-licensed. The runtime is provided by the separately packaged, MIT-licensed Hermes Agent project from Nous Research. See dependency metadata and upstream notices for the engine’s terms.

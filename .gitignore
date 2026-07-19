@@ -8,3 +8,8 @@ build/
 *.egg-info/
 .env
 *.db
+.smoke-*/
+faye-tui*.ansi
+faye-tui*.png
+faye-tui-state.json
+hermes-*.json

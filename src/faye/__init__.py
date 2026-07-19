@@ -1,6 +1,3 @@
-"""Faye: a fast, voice-first multi-agent assistant."""
+"""Faye production AI-agent distribution."""
 
-from faye.orchestrator import BoundedOrchestrator
-
-__all__ = ["BoundedOrchestrator"]
-__version__ = "0.1.0"
+__version__ = "1.0.0"
